@@ -37,7 +37,7 @@ export class GameWorld{
       const model=painted[index].scene;
       model.traverse(o=>{if(o.isMesh){
         if(o.material.map)o.material.map.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());
-        if(!o.material.emissiveMap){o.material.emissive.set(0xffffff);o.material.emissiveMap=o.material.map;o.material.emissiveIntensity=.10;}
+        if(!o.material.emissiveMap){o.material.emissive.set(0xffffff);o.material.emissiveMap=o.material.map;o.material.emissiveIntensity=type==='boss'?.28:.10;}
       }});
       model.scale.setScalar(spec.scale);model.userData.design=spec.design;this.kit[type]=model;
     });
@@ -47,7 +47,7 @@ export class GameWorld{
     this.hero=new THREE.Sprite(material);this.hero.scale.set(2.45,3.65,1);this.hero.visible=false;this.scene.add(this.hero);this.setHeroFrame(0,0);this.resize();
   }
   setHeroFrame(row,col){applyHeroFrame(this.hero,this.heroTexture,row,col);}
-  cloneEnemy(type){if(type==='boss'){const group=new THREE.Group;for(const name of ['sentinel_body','sentinel_leg_0','sentinel_leg_1','sentinel_leg_2','sentinel_leg_3']){const ob=this.kit[name]?.clone(true);if(ob)group.add(ob);}group.scale.setScalar(1.1);return group;}const model=this.kit[type];if(!model)throw new Error('Missing enemy model: '+type);return model.clone(true);}
+  cloneEnemy(type){const model=this.kit[type];if(!model)throw new Error('Missing enemy model: '+type);return model.clone(true);}
   resize(){const w=innerWidth,h=innerHeight;this.renderer.setSize(w,h,false);this.composer.setSize(w,h);this.camera.aspect=w/h;this.camera.fov=w<h?67:59;this.camera.updateProjectionMatrix();}
   setCamera(distance,bank=0,title=false){const h=title?8:9.5+Math.sin(distance/200)*.9;this.camera.position.copy(trackPoint(distance,0,h));const look=trackPoint(distance+110,0,h+1.2);this.camera.up.set(bank*.06,1,0).normalize();this.camera.lookAt(look);this.sky.position.copy(this.camera.position);
     for(const ch of this.chunks){const center=ch.userData.index*CITY_ROUTE.chunkLength+CITY_ROUTE.chunkLength/2;ch.visible=center>distance-180&&center<distance+900;}

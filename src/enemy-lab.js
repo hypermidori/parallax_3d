@@ -1,4 +1,5 @@
 import './enemy-lab.css';
+import {applyGrendelPose,resetGrendelPose} from './grendel-motion.js';
 import {ENEMY_DESIGNS} from './enemy-designs.js';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -19,7 +20,9 @@ for(const button of document.querySelectorAll('[data-view]'))button.onclick=()=>
 document.getElementById('spin').onclick=event=>{controls.autoRotate=!controls.autoRotate;event.target.classList.toggle('active',controls.autoRotate);};
 let night=false;document.getElementById('lighting').onclick=event=>{night=!night;hemi.intensity=night?1.2:2.3;key.intensity=night?.7:3;key.color.set(night?0x77a9ff:0xffefdb);scene.background.set(night?'#071322':'#182431');event.target.classList.toggle('active',night);};
 const selector=document.getElementById('model-select'),params=new URLSearchParams(location.search);
-let currentModel=null,requestVersion=0;
+let currentModel=null,requestVersion=0,currentType=null,hoverEnabled=true,hoverTime=0;
+const motionButton=document.getElementById('hover-motion');
+motionButton.onclick=()=>{hoverEnabled=!hoverEnabled;motionButton.classList.toggle('active',hoverEnabled);if(currentModel&&!hoverEnabled)resetGrendelPose(currentModel);};
 selector.value=ENEMY_DESIGNS[params.get('model')]?params.get('model'):'interceptor';
 async function loadModel(){
   const version=++requestVersion,type=selector.value,spec=ENEMY_DESIGNS[type];
@@ -34,7 +37,7 @@ async function loadModel(){
     const dispose=model=>{const maps=new Set();model.traverse(o=>{if(o.isMesh){o.geometry.dispose();for(const value of Object.values(o.material))if(value?.isTexture)maps.add(value);o.material.dispose();}});maps.forEach(t=>t.dispose());};
     if(version!==requestVersion){dispose(asset.scene);return;}
     if(currentModel){scene.remove(currentModel);dispose(currentModel);}
-    currentModel=asset.scene;scene.add(currentModel);
+    currentModel=asset.scene;currentType=type;hoverTime=0;hoverEnabled=true;motionButton.hidden=type!=='boss';motionButton.classList.toggle('active',hoverEnabled);scene.add(currentModel);
     let triangles=0,meshes=0,textured=0;
     currentModel.traverse(o=>{if(o.isMesh){meshes++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;if(o.material.map&&o.geometry.attributes.uv)textured++;if(o.material.map)o.material.map.anisotropy=8;}});
     const box=new THREE.Box3().setFromObject(currentModel),size=box.getSize(new THREE.Vector3);
@@ -42,9 +45,10 @@ async function loadModel(){
     document.querySelector('[data-view="beauty"]').click();
     document.getElementById('loading').hidden=true;
     document.getElementById('model-stats').textContent=triangles.toLocaleString()+' triangles / '+textured+' textured meshes / GLB';
-    window.__enemyLab={ready:true,type,triangles,meshes,textured,hasShotOrigin:!!currentModel.getObjectByName('ShotOrigin')};
+    window.__enemyLab={ready:true,type,triangles,meshes,textured,hasShotOrigin:!!currentModel.getObjectByName('ShotOrigin'),hasAimTarget:!!currentModel.getObjectByName('AimTarget'),hoverJets:Array.from({length:4},(_,i)=>currentModel.getObjectByName('HoverJet'+i)).filter(Boolean).length};
   }catch(e){document.getElementById('loading').textContent=e.message;console.error(e);}
 }
 selector.onchange=()=>{history.replaceState(null,'','?model='+selector.value);loadModel();};
 loadModel();
-renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);});
+let previousTime=performance.now();
+renderer.setAnimationLoop(now=>{const dt=Math.min(.05,(now-previousTime)/1000);previousTime=now;if(currentType==='boss'&&currentModel&&hoverEnabled){hoverTime+=dt;applyGrendelPose(currentModel,hoverTime,0);}controls.update();renderer.render(scene,camera);});

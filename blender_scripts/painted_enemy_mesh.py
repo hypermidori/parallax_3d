@@ -1,4 +1,4 @@
-"""Shared image-textured mesh tools for the support enemy models."""
+"""Shared image-textured mesh tools for the enemy models."""
 import bpy,math,json,bmesh
 from pathlib import Path
 from mathutils import Vector
@@ -7,12 +7,14 @@ TILES={'orange':(.01,.51,.323,.99),'olive':(.344,.51,.657,.99),'ivory':(.677,.51
  'metal':(.01,.01,.323,.49),'black':(.344,.01,.657,.49),
  'amber':(.687,.397,.98,.475),'red':(.687,.277,.98,.355),
  'steel':(.687,.15,.98,.23),'hazard':(.687,.025,.98,.10)}
+DEFAULT_TILES=TILES.copy()
 M={};parts=[];anchors=[];image=None
-def begin(prefix):
-    global M,parts,anchors,image
+def begin(prefix, atlas="support-enemies-atlas.png", tiles=None, emissive=("amber","red")):
+    global M,parts,anchors,image,TILES
+    TILES=tiles if tiles is not None else DEFAULT_TILES
     bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
     M={};parts=[];anchors=[]
-    image=bpy.data.images.load(str(ROOT/'public/assets/support-enemies-atlas.png'));image.pack()
+    image=bpy.data.images.load(str(ROOT/'public/assets'/atlas));image.pack()
     for name in TILES:
         mat=bpy.data.materials.new(prefix+' '+name);mat.use_nodes=True
         shader=mat.node_tree.nodes.get('Principled BSDF')
@@ -20,7 +22,7 @@ def begin(prefix):
         shader.inputs['Metallic'].default_value=.2 if name in ['orange','olive','ivory'] else .55
         tex=mat.node_tree.nodes.new('ShaderNodeTexImage');tex.image=image
         mat.node_tree.links.new(tex.outputs['Color'],shader.inputs['Base Color'])
-        if name in ['amber','red']:
+        if name in emissive:
             mat.node_tree.links.new(tex.outputs['Color'],shader.inputs['Emission Color'])
             shader.inputs['Emission Strength'].default_value=.85
             shader.inputs['Metallic'].default_value=.15
@@ -94,7 +96,7 @@ def beam(name,a,b,radius,mat='metal',count=8):
 def panel(name,x,y,z,w,h,mat='blue'):
     return slab(name,[(x-w/2,y-h/2),(x+w/2,y-h/2),(x+w/2,y+h/2),(x-w/2,y+h/2)],z,z+.028,mat,mat,.009)
 
-def finish(slug,title,target=(0,0,0),span=7):
+def finish(slug,title,target=(0,0,0),span=7,rig=None):
     out=ROOT/'output'/slug;out.mkdir(parents=True,exist_ok=True)
     root=bpy.data.objects.new(title,None);bpy.context.collection.objects.link(root)
     for ob in parts:
@@ -108,22 +110,40 @@ def finish(slug,title,target=(0,0,0),span=7):
     scene.world.node_tree.nodes['Background'].inputs[0].default_value=(.14,.19,.26,1)
     scene.world.node_tree.nodes['Background'].inputs[1].default_value=.65
     for loc,power,size,color in [((-4,4,7),950,6,(1,.9,.78)),((5,-3,6),1300,5,(.5,.73,1)),((0,7,4),600,4,(.8,.9,1))]:
-        bpy.ops.object.light_add(type='AREA',location=loc);light=bpy.context.object;light.data.energy=power;light.data.size=size;light.data.color=color
+        factor=span/7 if rig else 1
+        lightloc=Vector(target)+Vector(loc)*factor if rig else Vector(loc)
+        bpy.ops.object.light_add(type='AREA',location=lightloc);light=bpy.context.object;light.data.energy=power*factor**2;light.data.size=size*factor;light.data.color=color
         light.rotation_euler=(Vector(target)-light.location).to_track_quat('-Z','Y').to_euler()
     bpy.ops.object.camera_add(location=Vector(target)+Vector((8,10,7)));cam=bpy.context.object
     cam.rotation_euler=(Vector(target)-cam.location).to_track_quat('-Z','Y').to_euler();cam.data.type='ORTHO';cam.data.ortho_scale=span;scene.camera=cam
     scene.render.resolution_x=1000;scene.render.resolution_y=850;scene.render.resolution_percentage=100
     scene.view_settings.view_transform='AgX';scene.view_settings.look='AgX - Medium High Contrast';scene.view_settings.exposure=-.3
+    # Keep an editable, unbatched source; exported runtime groups retain local pivots.
     bpy.ops.wm.save_as_mainfile(filepath=str(out/(slug+'.blend')))
+    models=[]
+    if rig:
+        assigned={ob for group in rig.values() for ob in group['parts']}
+        groups={title+' painted hull':{'parts':[ob for ob in parts if ob not in assigned],'pivot':(0,0,0)},**rig}
+    else:groups={title+' painted hull':{'parts':parts,'pivot':(0,0,0)}}
+    for name,group in groups.items():
+        if not group['parts']:continue
+        bpy.ops.object.select_all(action='DESELECT')
+        for ob in group['parts']:ob.select_set(True)
+        model=group['parts'][0];bpy.context.view_layer.objects.active=model;bpy.ops.object.join();model.name=name
+        pivot=Vector(group['pivot'])
+        for vertex in model.data.vertices:vertex.co-=pivot
+        model.location=pivot;models.append(model)
     bpy.ops.object.select_all(action='DESELECT')
-    for ob in parts:ob.select_set(True)
-    bpy.context.view_layer.objects.active=parts[0];bpy.ops.object.join();model=parts[0];model.name=title+' painted hull'
+    for model in models:model.select_set(True)
     root.select_set(True)
     for ob in anchors:ob.select_set(True)
     bpy.ops.export_scene.gltf(filepath=str(ROOT/'public/assets'/(slug+'.glb')),export_format='GLB',use_selection=True,export_yup=True,export_apply=True,export_animations=False,export_extras=True)
-    model.data.calc_loop_triangles()
-    stats={'triangles':len(model.data.loop_triangles),'vertices':len(model.data.vertices),'uv':bool(model.data.uv_layers),'materials':len(model.data.materials),
-     'dimensions':list(model.dimensions),'shot_origin':list(anchors[0].location) if anchors else None}
+    for model in models:model.data.calc_loop_triangles()
+    corners=[model.matrix_world@Vector(corner) for model in models for corner in model.bound_box]
+    stats={'triangles':sum(len(model.data.loop_triangles) for model in models),'vertices':sum(len(model.data.vertices) for model in models),
+     'uv':all(bool(model.data.uv_layers) for model in models),'materials':len({mat.name for model in models for mat in model.data.materials}),
+     'dimensions':[max(p[i] for p in corners)-min(p[i] for p in corners) for i in range(3)],
+     'groups':[model.name for model in models],'shot_origin':list(anchors[0].location) if anchors else None}
     (out/'manifest.json').write_text(json.dumps(stats,indent=2),encoding='utf-8')
     for view,location,rotation in [('beauty',None,None),('top',(0,0,15),(0,0,math.pi)),('front',(0,14,target[2]),(math.pi/2,0,math.pi))]:
         if location:cam.location=location

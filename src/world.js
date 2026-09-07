@@ -6,6 +6,7 @@ import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {routeX,routeSlope,CITY_ROUTE,LOOP_X,loopChunkIndex} from './city-route.js';
 import {applyHeroFrame,installHeroAnimation} from './hero-frames.js';
+import {ENEMY_DESIGNS} from './enemy-designs.js';
 const UP=new THREE.Vector3(0,1,0);
 export function trackPoint(s,side=0,height=0){const slope=routeSlope(s),n=Math.sqrt(1+slope*slope);return new THREE.Vector3(routeX(s)+side/n,height,-s+side*slope/n);}
 export class GameWorld{
@@ -19,8 +20,8 @@ export class GameWorld{
     this.sharedGeometry={shot:new THREE.SphereGeometry(.10,6,4),bullet:new THREE.IcosahedronGeometry(.22,1),spark:new THREE.IcosahedronGeometry(.13,0)};
     this.sharedMaterial={shot:new THREE.MeshBasicMaterial({color:0x9affef,toneMapped:false}),bullet:new THREE.MeshBasicMaterial({color:new THREE.Color(3,.11,.45),toneMapped:false}),spark:new THREE.MeshBasicMaterial({color:0x9df4ff,toneMapped:false})};
   }
-  async load(onProgress){const loader=new GLTFLoader;let count=0;const done=()=>onProgress(++count/3);
-    const [city,enemies,hero]=await Promise.all([loader.loadAsync('/assets/night-city.glb').then(x=>{done();return x}),loader.loadAsync('/assets/enemy-kit.glb').then(x=>{done();return x}),new THREE.TextureLoader().loadAsync('/assets/player-flight-keyed.png').then(x=>{done();return x})]);
+  async load(onProgress){const loader=new GLTFLoader,designs=Object.entries(ENEMY_DESIGNS);let count=0;const done=()=>onProgress(++count/(3+designs.length));
+    const [city,enemies,hero,...painted]=await Promise.all([loader.loadAsync('/assets/night-city.glb').then(x=>{done();return x}),loader.loadAsync('/assets/enemy-kit.glb').then(x=>{done();return x}),new THREE.TextureLoader().loadAsync('/assets/player-flight-keyed.png').then(x=>{done();return x}),...designs.map(([,spec])=>loader.loadAsync('/assets/'+spec.slug+'.glb').then(x=>{done();return x}))]);
     this.city=city.scene;this.scene.add(this.city);this.city.traverse(o=>{if(o.isMesh){o.frustumCulled=true;if(o.material.map)o.material.map.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());if(o.material.name==='Office windows')o.material.emissiveIntensity=.65;if(o.material.name==='Concrete facade')o.material.emissiveIntensity=.14;}});
     this.chunks=this.city.children.filter(o=>/^city_\d/.test(o.name));for(const ch of this.chunks)ch.userData.index=Number(ch.name.match(/\d+/)[0]);
     const templates=this.city.children.filter(o=>/^boss_\d/.test(o.name)).sort((a,b)=>a.name.localeCompare(b.name));
@@ -31,6 +32,16 @@ export class GameWorld{
     });
 
     enemies.scene.traverse(o=>{if(o.isMesh){o.material.side=THREE.DoubleSide;if(o.material.map)o.material.map.anisotropy=4;if(o.material.name!=='Illuminated details'){o.material.emissive.set(0xffffff);o.material.emissiveMap=o.material.map;o.material.emissiveIntensity=o.material.name==='Painted details'?1.3:.45;o.material.metalness=.15;}}});for(const ob of enemies.scene.children)this.kit[ob.name]=ob;
+    // Painted production models retain their own optical emission textures.
+    designs.forEach(([type,spec],index)=>{
+      const model=painted[index].scene;
+      model.traverse(o=>{if(o.isMesh){
+        if(o.material.map)o.material.map.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());
+        if(!o.material.emissiveMap){o.material.emissive.set(0xffffff);o.material.emissiveMap=o.material.map;o.material.emissiveIntensity=.10;}
+      }});
+      model.scale.setScalar(spec.scale);model.userData.design=spec.design;this.kit[type]=model;
+    });
+
     hero.colorSpace=THREE.SRGBColorSpace;hero.magFilter=THREE.NearestFilter;hero.minFilter=THREE.NearestFilter;hero.generateMipmaps=false;this.heroTexture=hero;
     const material=new THREE.SpriteMaterial({map:hero,transparent:true,depthWrite:false,alphaTest:.4,fog:false,toneMapped:false});installHeroAnimation(material);
     this.hero=new THREE.Sprite(material);this.hero.scale.set(2.45,3.65,1);this.hero.visible=false;this.scene.add(this.hero);this.setHeroFrame(0,0);this.resize();

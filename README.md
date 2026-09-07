@@ -72,3 +72,17 @@ npm run preview
 - [操作確認・自動検証](docs/PLAYTEST.md)
 
 スマホの縦画面とタッチ入力はブラウザでエミュレーション確認しています。スマホ実機の速度、物理コントローラーは未検証です。
+
+
+## 迎撃機のモデル制作
+
+原作の青白の航空機を参考に、２Dデザイン画を作ってからBlenderで制作した「AZURE KESTREL」を迎撃機へ組み込んでいます。約16秒から登場します。5,616三角形、専用画像テクスチャ付き。
+
+[２D案と３Dモデルの比較画面](http://127.0.0.1:5180/enemy-lab.html)では拡大・回転と四方向の確認、夜間照明への切り替えができます。製品ビルドにも enemy-lab.html を含めています。
+
+制作資料と再生成手順：[references/enemies/kestrel/README.md](references/enemies/kestrel/README.md)
+
+
+偵察機「AMBER FIREFLY」と地上砲台「IRON WARDEN」も、２D案からBlenderで制作したテクスチャ付きモデルへ差し替えました。砲台は砲身を持たず、中央のコアから弾を出します。比較画面のMODEL選択で３種類を切り替えられます。
+
+[全３体の制作資料](references/enemies/README.md)

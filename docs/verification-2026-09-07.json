@@ -1,0 +1,53 @@
+{
+  "checks": [
+    "all 84 city meshes have UVs and image textures",
+    "mouse hold accumulates multiple targets",
+    "mouse release launches homing lasers",
+    "pause freezes the simulation",
+    "keyboard moves the heroine and selects bank animation",
+    "gamepad left stick moves aim",
+    "gamepad A holds the lock action",
+    "armor depletion reaches game over",
+    "retry restores clean state",
+    "all waves and three boss phases reach stage clear",
+    "clear screen can restart",
+    "touch hold accumulates locks",
+    "touch release fires lasers",
+    "touch cancellation does not leave a held input",
+    "no browser exceptions or missing assets"
+  ],
+  "errors": [],
+  "failedRequests": [],
+  "playthrough": {
+    "state": "clear",
+    "elapsed": 152.04373333334632,
+    "distance": 1680,
+    "hp": 100,
+    "score": 61920,
+    "kills": 81,
+    "locks": 0,
+    "stats": {
+      "lasers": 302,
+      "locks": 404,
+      "shots": 1364,
+      "hits": 25
+    },
+    "hero": {
+      "side": -0.3130058414092221,
+      "height": 6.384153174325891,
+      "bank": 0.0043628001683719145,
+      "frame": 0
+    },
+    "aim": {
+      "x": -0.0388945081220256,
+      "y": -0.15397618503380556
+    },
+    "held": false,
+    "bullets": 0,
+    "lasers": 0,
+    "bossHP": -4,
+    "fps": 109.12530475273121,
+    "cityMeshes": 12
+  },
+  "note": "Accelerated autoplay uses invulnerability to check stage progression. Damage/death are checked separately. Mobile viewport and gamepad API are emulated, not physical devices."
+}

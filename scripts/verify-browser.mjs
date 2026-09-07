@@ -1,0 +1,43 @@
+// Run against npm run dev. Playwright may be provided through NODE_PATH.
+import {createRequire} from 'node:module';
+import {mkdir,writeFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const {chromium}=createRequire(import.meta.url)('playwright');
+const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXE||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'});
+const report={checks:[],errors:[],failedRequests:[]};
+const check=(name,condition)=>{assert.ok(condition,name);report.checks.push(name);};
+const origin=process.env.GAME_URL||'http://127.0.0.1:5180/';
+const page=await browser.newPage({viewport:{width:1440,height:900}});
+const watch=p=>{p.on('pageerror',e=>report.errors.push(e.message));p.on('response',r=>{if(r.status()>=400)report.failedRequests.push([r.url(),r.status()]);});};watch(page);
+const read=()=>page.evaluate(()=>window.__nightVector.inspect());
+await mkdir('screenshots',{recursive:true});await mkdir('output/night-city',{recursive:true});
+try{
+  await page.goto(origin+'?debug=1');await page.waitForFunction(()=>window.__nightVector);
+  check('all 84 city meshes have UVs and image textures',(await read()).materials.length===84&&(await read()).materials.every(m=>m.textured&&m.uv));
+  await page.screenshot({path:'screenshots/night-vector-title.png'});
+  await page.click('#start');await page.waitForFunction(()=>__nightVector.inspect().enemies.length>0);
+  let e=(await read()).enemies[0].screen;await page.mouse.move((e.x+1)*720,(1-e.y)*450);await page.mouse.down();await page.waitForTimeout(800);
+  check('mouse hold accumulates multiple targets',(await read()).locks>1);await page.mouse.up();await page.waitForTimeout(180);
+  check('mouse release launches homing lasers',(await read()).stats.lasers>1);await page.screenshot({path:'screenshots/gameplay-lasers.png'});
+  await page.keyboard.press('Escape');let paused=await read();await page.waitForTimeout(200);check('pause freezes the simulation',(await read()).elapsed===paused.elapsed);await page.click('#resume');
+  let before=(await read()).hero.side;await page.keyboard.down('ArrowRight');await page.waitForTimeout(250);await page.keyboard.up('ArrowRight');check('keyboard moves the heroine and selects bank animation',(await read()).hero.side>before&&(await read()).hero.bank>0);
+  await page.evaluate(()=>{window.testPad={axes:[-.8,0],buttons:Array.from({length:10},()=>({pressed:false}))};Object.defineProperty(navigator,'getGamepads',{value:()=>[window.testPad],configurable:true});});
+  before=(await read()).aim.x;await page.waitForTimeout(200);check('gamepad left stick moves aim',(await read()).aim.x<before);await page.evaluate(()=>{testPad.axes=[0,0];testPad.buttons[0].pressed=true;});await page.waitForTimeout(100);check('gamepad A holds the lock action',(await read()).held);await page.evaluate(()=>testPad.buttons[0].pressed=false);
+  await page.evaluate(()=>__nightVector.damage(100));check('armor depletion reaches game over',(await read()).state==='dead');await page.click('#retry');let reset=await read();check('retry restores clean state',reset.hp===100&&reset.score===0&&reset.kills===0&&reset.enemies.length===0);
+  await page.goto(origin+'?debug=1&autopilot=1&speed=8&invulnerable=1');await page.waitForFunction(()=>window.__nightVector);await page.click('#start');
+  await page.waitForFunction(()=>__nightVector.inspect().elapsed>=123,null,{timeout:40000});await page.screenshot({path:'screenshots/boss-encounter.png'});
+  await page.waitForFunction(()=>__nightVector.inspect().state==='clear',null,{timeout:40000});report.playthrough=await read();delete report.playthrough.materials;delete report.playthrough.enemies;
+  check('all waves and three boss phases reach stage clear',report.playthrough.bossHP<=0&&report.playthrough.kills>60&&report.playthrough.elapsed>140);
+  await page.screenshot({path:'screenshots/stage-clear.png'});await page.click('#retry');check('clear screen can restart',(await read()).state==='playing'&&(await read()).hp===100);await page.evaluate(()=>__nightVector.pause());
+  const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,isMobile:true,hasTouch:true});await context.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Test fallback','NotAllowedError'));if(screen.orientation)screen.orientation.lock=()=>Promise.reject(new DOMException('Test fallback','NotSupportedError'));});const mobile=await context.newPage();watch(mobile);
+  await mobile.goto(origin+'?debug=1');await mobile.waitForFunction(()=>window.__nightVector);check('portrait touch viewport is gated',await mobile.locator('#rotate-screen').isVisible());await mobile.setViewportSize({width:844,height:390});await mobile.waitForFunction(()=>document.getElementById('rotate-screen').classList.contains('hidden'));await mobile.locator('#start').tap();await mobile.waitForFunction(()=>__nightVector.inspect().enemies.length>0);
+  const session=await context.newCDPSession(mobile);e=await mobile.evaluate(()=>__nightVector.inspect().enemies[0].screen);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:(e.x+1)*422,y:(1-e.y)*195+48}]});await mobile.waitForTimeout(800);
+  check('touch hold accumulates locks',await mobile.evaluate(()=>__nightVector.inspect().locks>1));await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await mobile.waitForTimeout(160);
+  check('touch release fires lasers',await mobile.evaluate(()=>__nightVector.inspect().stats.lasers>1));check('landscape viewport is not zoomed or clipped',await mobile.evaluate(()=>Math.abs(visualViewport.width-innerWidth)<2));await mobile.screenshot({path:'screenshots/mobile-flight.png'});
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:380,y:220}]});await session.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});await mobile.waitForTimeout(100);check('touch cancellation does not leave a held input',await mobile.evaluate(()=>!__nightVector.inspect().held&&__nightVector.inspect().locks===0));
+  await mobile.setViewportSize({width:390,height:844});await mobile.waitForFunction(()=>__nightVector.inspect().state==='paused');check('rotating portrait pauses play',await mobile.locator('#rotate-screen').isVisible());await mobile.setViewportSize({width:844,height:390});await mobile.waitForFunction(()=>document.getElementById('rotate-screen').classList.contains('hidden'));check('rotation does not resume without player input',await mobile.evaluate(()=>__nightVector.inspect().state==='paused'));
+  check('no browser exceptions or missing assets',report.errors.length===0&&report.failedRequests.length===0);
+  report.note='Accelerated autoplay uses invulnerability to check stage progression. Damage/death are checked separately. Mobile viewport and gamepad API are emulated, not physical devices.';
+  await writeFile('output/night-city/browser-verification.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+}finally{await browser.close();}

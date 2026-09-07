@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hero frame registration review</title>
+<style>
+body{margin:0;background:#091421;color:#d8f3ff;font:14px sans-serif;text-align:center}h1{font-size:18px}canvas{display:block;margin:auto}p{margin:10px}button{padding:8px 18px;margin:0 5px}
+</style>
+<h1>スプライト位置合わせ確認 — 上段：修正前 / 下段：修正後</h1>
+<p>左から静止・右旋回・左旋回。下段は脚を固定し、上半身と噴射の明滅だけを再生。</p>
+<button id="play">停止 / 再生</button><button id="step">1コマ進める</button><span id="frame"></span>
+<canvas id="review" width="960" height="790"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import {applyHeroFrame,installHeroAnimation} from '../src/hero-frames.js';
+const renderer=new THREE.WebGLRenderer({canvas:document.querySelector('canvas'),antialias:false});
+renderer.setSize(960,790);renderer.setClearColor(0x091421);
+const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-480,480,395,-395,.1,100);
+camera.position.z=10;
+const original=await new THREE.TextureLoader().loadAsync('/assets/player-flight-keyed.png');
+original.colorSpace=THREE.SRGBColorSpace;original.magFilter=THREE.NearestFilter;original.minFilter=THREE.NearestFilter;
+const sprites=[];
+for(let corrected=0;corrected<2;corrected++)for(let row=0;row<3;row++){
+  const map=original.clone(),material=new THREE.SpriteMaterial({map,transparent:true,depthWrite:false,toneMapped:false});
+  material.onBeforeCompile=s=>s.fragmentShader=s.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\nif(diffuseColor.g>.25 && diffuseColor.g>diffuseColor.r*1.3 && diffuseColor.g>diffuseColor.b*1.3)discard;');
+  if(corrected)installHeroAnimation(material);
+  const sprite=new THREE.Sprite(material),group=new THREE.Group();
+  group.position.set((row-1)*320,corrected?-188:192,0);group.scale.set(248/2.45,337/3.65,1);group.add(sprite);scene.add(group);
+  const lines=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-125,0,1),new THREE.Vector3(125,0,1),new THREE.Vector3(0,-174,1),new THREE.Vector3(0,174,1)]);
+  const guide=new THREE.LineSegments(lines,new THREE.LineBasicMaterial({color:0x42aac0,transparent:true,opacity:.4}));guide.position.copy(group.position);scene.add(guide);
+  sprites.push({sprite,map,row,corrected});
+}
+let playing=true,column=0,last=-1;
+window.setReviewFrame=c=>{column=c;playing=false;};
+document.querySelector('#play').onclick=()=>playing=!playing;
+document.querySelector('#step').onclick=()=>{playing=false;column=(column+1)%4;};
+function draw(time){requestAnimationFrame(draw);if(playing)column=Math.floor(time/180)%4;if(column!==last){for(const {sprite,map,row,corrected} of sprites){if(corrected)applyHeroFrame(sprite,map,row,column);else{sprite.scale.set(2.45,3.65,1);map.repeat.set(248/1536,337/1024);map.offset.set((135+338*column)/1536,1-(26+333*row+337)/1024);}}last=column;document.querySelector('#frame').textContent=`FRAME ${column+1}`;}renderer.render(scene,camera);}
+requestAnimationFrame(draw);
+</script>

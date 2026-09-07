@@ -1,0 +1,5 @@
+# Night boulevard concept — generation brief
+
+新規生成コンセプトの再制作用ブリーフ（実行時プロンプトの要約）。
+
+Wide cinematic environment concept for a real-time 3D rail shooter, a midnight Japanese financial district. Low forward-facing camera about eight meters above a broad 24-meter road, gentle curve to the right. Dense 12–30 storey buildings with heavy podiums, stepped towers, physical window frames, rooftop equipment. Charcoal and midnight blue architecture, irregular cool white and blue lit windows, occasional warm interiors, sparse magenta signs. A substantial enclosed glass skybridge spanning the road with visible metal trusses and columns. Worn detailed road, sidewalks and thin blue service lights, distant blue haze and a central high spire. Buildable stylized geometry, convincing parallax and layered depth. No characters, UI, text labels or daylight. Match the original game's dark blue city mood.

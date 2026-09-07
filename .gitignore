@@ -1,0 +1,8 @@
+.tools/
+output/
+__pycache__/
+*.blend1
+*.blend2
+node_modules/
+dist/
+screenshots/

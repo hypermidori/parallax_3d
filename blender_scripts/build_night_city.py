@@ -6,6 +6,8 @@ import bpy,math,json,random,bmesh
 from pathlib import Path
 from mathutils import Vector
 ROOT=Path(__file__).resolve().parents[1];AS=ROOT/'public/assets';OUT=ROOT/'output/night-city';OUT.mkdir(parents=True,exist_ok=True)
+ROUTE=json.loads((ROOT/'config/city-route.json').read_text())
+LOOP_START=ROUTE['loopStart'];CHUNK_LENGTH=ROUTE['chunkLength'];STORY_CHUNKS=LOOP_START//CHUNK_LENGTH
 random.seed(42)
 bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
 atlas=bpy.data.images.load(str(AS/'city-atlas.png'));roadim=bpy.data.images.load(str(AS/'road-original.png'))
@@ -43,9 +45,22 @@ def quad(vs,mat,tile='metal',uv=None):
     if uv is None:
         u0,v0,u1,v1=TILES[tile];uv=[(u0,v0),(u1,v0),(u1,v1),(u0,v1)]
     b['uv'].append(uv)
-def road_x(s):return 28*math.sin(s/240)+10*math.sin(s/90)
+def original_x(s):return 28*math.sin(s/240)+10*math.sin(s/90)
+LOOP_X=original_x(LOOP_START)
+def road_x(s):
+    start=ROUTE['transitionStart']
+    if s<=start:return original_x(s)
+    if s>=LOOP_START:return LOOP_X
+    t=(s-start)/(LOOP_START-start);w=t*t*t*(10+t*(-15+6*t))
+    return original_x(s)*(1-w)+LOOP_X*w
+def road_slope(s):
+    start=ROUTE['transitionStart'];d=28/240*math.cos(s/240)+10/90*math.cos(s/90)
+    if s<=start:return d
+    if s>=LOOP_START:return 0
+    length=LOOP_START-start;t=(s-start)/length;w=t*t*t*(10+t*(-15+6*t));dw=30*t*t*(1-t)*(1-t)/length
+    return d*(1-w)+(LOOP_X-original_x(s))*dw
 def basis(s):
-    d=28/240*math.cos(s/240)+10/90*math.cos(s/90);n=math.sqrt(1+d*d)
+    d=road_slope(s);n=math.sqrt(1+d*d)
     return Vector((1/n,-d/n,0)),Vector((d/n,1/n,0))
 def pos(s,side=0,z=0):
     r,f=basis(s);return Vector((road_x(s),s,z))+r*side
@@ -128,15 +143,17 @@ def skybridge(s):
     for x in range(-15,16,5):beam(p(x,-2.6,-.8),p(x,2.6,-.8),.4)
 
 print('BUILDING_CITY',flush=True)
-for ci in range(12):
-    chunk=f'city_{ci:02d}';s0=ci*180
+for ci in range(STORY_CHUNKS+ROUTE['loopVariants']):
+    is_loop=ci>=STORY_CHUNKS
+    chunk=f'boss_{ci-STORY_CHUNKS:02d}' if is_loop else f'city_{ci:02d}'
+    s0=ci*CHUNK_LENGTH
     # Textured ground continues beneath buildings and cross-street gaps.
-    for s in range(s0,s0+180,30):
+    for s in range(s0,s0+CHUNK_LENGTH,30):
         for lateral in range(-200,200,20):
             q=[pos(s,lateral,-.06),pos(s,lateral+20,-.06),pos(s+30,lateral+20,-.06),pos(s+30,lateral,-.06)]
             quad([tuple(p) for p in q],'Concrete paving','paving')
     # Road ribbons follow the same continuous path used by the game camera.
-    for s in range(s0,s0+180,6):
+    for s in range(s0,s0+CHUNK_LENGTH,6):
         q=[pos(s,-12,.025),pos(s,12,.025),pos(s+6,12,.025),pos(s+6,-12,.025)]
         quad([tuple(p) for p in q],'Road asphalt','road',[(0,0),(1,0),(1,.26),(0,.26)])
         for sign in (-1,1):
@@ -148,7 +165,7 @@ for ci in range(12):
         for lane in (-8,-4,0,4,8):
             if (s//6)%2==0:
                 beam(pos(s,lane,.035),pos(s+3,lane,.035),.075,'Painted details','p3')
-    for s in range(s0+10,s0+180,30):
+    for s in range(s0+10,s0+CHUNK_LENGTH,30):
         for sign in (-1,1):
             c=pos(s,sign*14.5,0);r,f=basis(s)
             beam(c+Vector((0,0,.3)),c+Vector((0,0,6.5)),.13)
@@ -158,24 +175,30 @@ for ci in range(12):
             box(pos(s+10,sign*16.5,.7),(1.6,4,1),'Concrete paving','paving')
             # Three-dimensional angular foliage in low concrete planters.
             for j in range(4):box(pos(s+8.6+j,sign*16.5,1.45),(.9,.95,.75),'Painted details','p4',j*.4)
-    for s in range(s0+22,s0+180,43):
+    for s in range(s0+22,s0+CHUNK_LENGTH,43):
         for sign in (-1,1):
             w=random.uniform(15,24);d=random.uniform(26,36);h=random.choice([42,54,68,84,108,128])
             tower(s,sign*(20+w/2),w,d,h,random.randrange(2),True)
-    for s in range(s0+45,s0+180,85):
+    for s in range(s0+45,s0+CHUNK_LENGTH,85):
         for sign in (-1,1):tower(s,sign*73,random.uniform(24,38),38,random.uniform(90,185),0,False)
-    if ci in [0,3,6,8]:skybridge(s0+125)
+    if ci in [0,3,6,8] or (is_loop and (ci-STORY_CHUNKS)%2==0):skybridge(s0+125)
     # Raised utilities make the later section visibly different from the entry.
     if ci in [4,5,6]:
-        for s in range(s0,s0+180,18):
+        for s in range(s0,s0+CHUNK_LENGTH,18):
             r,f=basis(s);ang=math.atan2(r.y,r.x)
             box(pos(s,0,31),(34,18,.65),'Architectural metal','metal',ang)
             for sign in (-1,1):box(pos(s,sign*16,15),(1.1,1.4,30),'Concrete paving','paving',ang)
             for off in (-8,8):beam(pos(s,off,30.5),pos(s+18,off,30.5),.09,'Illuminated details','p0')
 
-# Landmark beyond the boss arena: tiered spire and a plaza gate.
-chunk='city_11';tower(2040,0,46,46,245,0,False)
-for side in (-1,1):tower(1830,side*75,35,46,118,1,True)
+# Keep the flight corridor open. A flank spire punctuates each 720 m cycle.
+chunk='boss_01';tower(LOOP_START+CHUNK_LENGTH+90,115,46,46,245,0,False)
+
+# Normalize loop geometry to local coordinates so chunks can move without
+# rebuilding meshes. Road, pavement and lane markings share identical ends.
+for (name,mat),bucket in BUCKET.items():
+    if name.startswith('boss_'):
+        s0=LOOP_START+int(name.split('_')[1])*CHUNK_LENGTH
+        bucket['v']=[(v[0]-LOOP_X,v[1]-s0,v[2]) for v in bucket['v']]
 
 def make_objects():
     roots={};objects=[]
@@ -191,6 +214,10 @@ def make_objects():
         objects.append(ob)
     return roots,objects
 roots,objects=make_objects();city_objects=list(objects)+list(roots.values())
+for name,root in roots.items():
+    if name.startswith('boss_'):
+        root.location=(LOOP_X,LOOP_START+int(name.split('_')[1])*CHUNK_LENGTH,0)
+        root['loop_length']=CHUNK_LENGTH
 def export(path,obs):
     bpy.ops.object.select_all(action='DESELECT')
     for ob in obs:ob.select_set(True)
@@ -242,5 +269,6 @@ scene.render.resolution_x=1280;scene.render.resolution_y=720;scene.render.resolu
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'night-city.blend'))
 scene.render.filepath=str(OUT/'concept-match.png');bpy.ops.render.render(write_still=True)
 stats={'city_meshes':len(objects),'city_triangles':sum(len(o.data.loop_triangles) if o.data.loop_triangles else sum(len(p.vertices)-2 for p in o.data.polygons) for o in objects),
- 'chunks':len(roots),'material_names':list(M),'textures':[im.name for im in (atlas,roadim,palette)],'all_meshes_uv_mapped':all(o.data.uv_layers for o in objects),'route_length_m':2160}
-(OUT/'manifest.json').write_text(json.dumps(stats,indent=2),encoding='utf-8');print('CITY_COMPLETE',json.dumps(stats),flush=True)
+ 'chunks':len(roots),'material_names':list(M),'textures':[im.name for im in (atlas,roadim,palette)],'all_meshes_uv_mapped':all(o.data.uv_layers for o in objects),'approach_length_m':LOOP_START,'loop_length_m':CHUNK_LENGTH*ROUTE['loopVariants'],
+ 'route_samples':[{'s':s,'x':road_x(s),'slope':road_slope(s)} for s in range(0,2521,12)]}
+(OUT/'manifest.json').write_text(json.dumps(stats,indent=2),encoding='utf-8');print('CITY_COMPLETE',json.dumps({k:v for k,v in stats.items() if k!='route_samples'}),flush=True)

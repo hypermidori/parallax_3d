@@ -1,0 +1,9 @@
+{
+  "transitionStart": 1440,
+  "loopStart": 1800,
+  "chunkLength": 180,
+  "loopVariants": 4,
+  "poolSize": 8,
+  "flightSpeed": 14,
+  "bossDistance": 68
+}

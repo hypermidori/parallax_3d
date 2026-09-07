@@ -1,6 +1,8 @@
 import {clamp} from './combat.js';
 
-export const AIM_LIMITS = {left: -.92, right: .92, bottom: -.4, top: .2};
+export const AIM_LIMITS = {left: -.3, right: .3, bottom: -.4, top: .2};
+
+const AIM_SPEED = .85;
 
 export function padDirection(dx, dy, radius) {
   const length = Math.hypot(dx, dy);
@@ -123,8 +125,8 @@ export class FlightInput {
       x += stick.x;
       y += stick.y;
     }
-    // A narrower, slower vertical axis keeps aim around the enemy approach.
-    this.aim.x = clamp(this.aim.x + clamp(x, -1, 1) * dt * 1.55, AIM_LIMITS.left, AIM_LIMITS.right);
-    this.aim.y = clamp(this.aim.y + clamp(y, -1, 1) * dt * .85, AIM_LIMITS.bottom, AIM_LIMITS.top);
+    // Both axes share the same speed and a 30%-wide viewport travel band.
+    this.aim.x = clamp(this.aim.x + clamp(x, -1, 1) * dt * AIM_SPEED, AIM_LIMITS.left, AIM_LIMITS.right);
+    this.aim.y = clamp(this.aim.y + clamp(y, -1, 1) * dt * AIM_SPEED, AIM_LIMITS.bottom, AIM_LIMITS.top);
   }
 }

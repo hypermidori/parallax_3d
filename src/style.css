@@ -3,13 +3,6 @@
 @media(max-height:620px){.panel{padding:10px 0;left:6%;width:350px}.panel h1{font-size:50px;line-height:.95}.menu-rule{margin-bottom:10px}.eyebrow{margin-bottom:8px}.menu-subtitle{margin:12px 0 15px}.operation p,.menu-footer,.controls.secondary{display:none}.operation{margin-bottom:15px}.controls{margin-top:10px}.primary{height:43px}#telemetry{bottom:17px}.modal{padding:22px}#boss-hud{top:83px}}
 
 .panel > .primary{margin-top:24px}
-#app:fullscreen{width:100%;height:100%;background:#061120}
-#rotate-screen{position:absolute;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:25px;background:#061120f5;color:#a8eafb}
-#rotate-screen p{font:11px Consolas,monospace;letter-spacing:5px;margin:0}
-.rotate-device{width:78px;height:44px;border:2px solid #a8eafb;border-radius:7px;position:relative}
-.rotate-device:after{content:'';position:absolute;right:5px;top:18px;width:4px;height:4px;border-radius:50%;background:#a8eafb}
-.rotate-device span{position:absolute;top:-32px;left:15px;font-size:35px}
-#landscape-button{background:transparent;border:1px solid #a8eafb55;border-radius:4px;width:52px;height:44px;font-size:27px;color:#a8eafb}
 @media(pointer:coarse) and (orientation:landscape){
   #hud{top:max(15px,env(safe-area-inset-top));left:max(20px,env(safe-area-inset-left));right:max(20px,env(safe-area-inset-right))}
   .identity{display:none}.mission{width:42%;text-align:left}.score strong{font-size:21px}

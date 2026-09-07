@@ -6,10 +6,11 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.BR
 const report={checks:[],errors:[]};
 const check=(name,value)=>{assert.ok(value,name);report.checks.push(name);};
 try{
-  const context=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true});
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await context.addInitScript(()=>{
-    HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new Error('Emulated unsupported fullscreen'));
-    screen.orientation.lock=()=>Promise.reject(new Error('Emulated unsupported orientation lock'));
+    window.displayRequests=[];
+    HTMLElement.prototype.requestFullscreen=()=>{displayRequests.push('fullscreen');return Promise.resolve();};
+    screen.orientation.lock=()=>{displayRequests.push('orientation');return Promise.resolve();};
   });
   const page=await context.newPage();
   page.on('pageerror',e=>report.errors.push(e.message));
@@ -17,6 +18,9 @@ try{
   await page.waitForFunction(()=>window.__nightVector);
   await page.locator('#start').tap();
   const read=()=>page.evaluate(()=>__nightVector.inspect());
+  check('portrait start is available without a rotation gate',(await read()).state==='playing'&&await page.locator('#rotate-screen').count()===0);
+  check('start never requests fullscreen or orientation lock',await page.evaluate(()=>displayRequests.length===0));
+  await page.setViewportSize({width:844,height:390});await page.waitForTimeout(80);
   const session=await context.newCDPSession(page);
   const touch=(type,x,y)=>session.send('Input.dispatchTouchEvent',{type,touchPoints:x===undefined?[]:[{x,y}]});
   const same=(a,b)=>Math.abs(a.x-b.x)<1e-8&&Math.abs(a.y-b.y)<1e-8;
@@ -38,6 +42,10 @@ try{
   check('upper limit is 40 percent of viewport height',Math.abs((await read()).aim.y-.2)<1e-8);
   await touch('touchMove',690,370);await page.waitForTimeout(850);
   check('lower limit is 70 percent of viewport height',Math.abs((await read()).aim.y+.4)<1e-8);
+  await touch('touchMove',570,290);await page.waitForTimeout(850);
+  check('left limit is 35 percent of viewport width',Math.abs((await read()).aim.x+.3)<1e-8);
+  await touch('touchMove',810,290);await page.waitForTimeout(850);
+  check('right limit is 65 percent of viewport width',Math.abs((await read()).aim.x-.3)<1e-8);
   await touch('touchCancel');await page.waitForTimeout(50);
   const cancelled=await read();check('cancel clears pad and lock without firing',!cancelled.touchPad&&!cancelled.held&&cancelled.locks===0&&cancelled.stats.lasers===0);
   await page.evaluate(()=>__nightVector.retry());
@@ -51,8 +59,11 @@ try{
   check('releasing the pad fires acquired lasers',(await read()).stats.lasers>1);
   await touch('touchStart',140,270);await touch('touchMove',185,270);
   await page.setViewportSize({width:390,height:844});await page.waitForTimeout(100);
-  const rotated=await read();check('rotation cancels the pad and pauses play',rotated.state==='paused'&&!rotated.held&&!rotated.touchPad);
-  await page.setViewportSize({width:844,height:390});await page.locator('#resume').tap();await page.waitForTimeout(80);
+  const rotated=await read();check('rotation cancels the pad and keeps playing',rotated.state==='playing'&&!rotated.held&&!rotated.touchPad);
+  await page.screenshot({path:'screenshots/portrait-flight.png'});
+  await page.evaluate(()=>__nightVector.pause());await page.locator('#resume').tap();
+  check('manual pause can resume in portrait',(await read()).state==='playing');
+  await page.setViewportSize({width:844,height:390});await page.waitForTimeout(80);
   const resumed=(await read()).aim;await page.waitForTimeout(150);
   check('resuming does not retain a stale stick direction',same(resumed,(await read()).aim));
   check('no browser exceptions',report.errors.length===0);
